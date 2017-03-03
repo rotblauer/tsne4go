@@ -3,8 +3,12 @@ package tsne4go
 // Utility functions for tSNE
 
 import (
+	"fmt"
+	"log"
 	"math"
 	"math/rand"
+	"os"
+	"runtime"
 )
 
 // return 0 mean unit standard deviation random number
@@ -50,15 +54,24 @@ func fill2d(n int, val float64) []Point {
 
 // compute pairwise distance in all vectors in X
 func xtod(x Distancer) []float64 {
+	log.Println("Compute pairwise distance in all vectors in X")
+	c := make(chan int, runtime.NumCPU())
 	length := x.Len()
 	dists := make([]float64, length*length) // allocate contiguous array
 	for i := 0; i < length-1; i++ {
-		for j := i + 1; j < length; j++ {
-			d := x.Distance(i, j)
-			dists[i*length+j] = d
-			dists[j*length+i] = d
-		}
+		go func(i int) {
+			for j := i + 1; j < length; j++ {
+				d := x.Distance(i, j)
+				dists[i*length+j] = d
+				dists[j*length+i] = d
+			}
+			c <- 1
+		}(i)
 	}
+	for n := 0; n < length-1; n++ {
+		<-c
+	}
+
 	return dists
 }
 
@@ -71,74 +84,97 @@ var (
 
 // compute (p_{i|j} + p_{j|i})/(2n)
 func d2p(D []float64, perplexity, tol float64) []float64 {
+	log.Println("Compute d2p.................")
+	c := make(chan int, runtime.NumCPU())
 	length := int(math.Sqrt(float64(len(D))))
 	pTemp := make([]float64, length*length) // temporary probability matrix
-	prow := make([]float64, length)         // a temporary storage compartment
+	//prow := make([]float64, length)         // a temporary storage compartment
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute compartment.......\r"))
 	for i := 0; i < length; i++ {
-		betamin := negInf
-		betamax := inf
-		beta := 1.0 // initial value of precision
-		const maxtries = 500
-		// perform binary search to find a suitable precision beta
-		// so that the entropy of the distribution is appropriate
-		for num := 0; num < maxtries; num++ {
-			// compute entropy and kernel row with beta precision
-			psum := 0.0
-			for j := 0; j < length; j++ {
-				if i != j { // we dont care about diagonals
-					pj := math.Exp(-D[i*length+j] * beta)
+		go func(i int) {
+			betamin := negInf
+			betamax := inf
+			beta := 1.0 // initial value of precision
+			const maxtries = 500
+			prow := make([]float64, length) // a temporary storage compartment
+
+			// perform binary search to find a suitable precision beta
+			// so that the entropy of the distribution is appropriate
+			for num := 0; num < maxtries; num++ {
+				// compute entropy and kernel row with beta precision
+				psum := 0.0
+				for j := 0; j < length; j++ {
+					if i != j { // we dont care about diagonals
+						pj := math.Exp(-D[i*length+j] * beta)
+						prow[j] = pj
+						psum += pj
+					} else {
+						prow[j] = 0.0
+					}
+				}
+				// normalize p and compute entropy
+				hHere := 0.0
+				for j := 0; j < length; j++ {
+					pj := prow[j] / psum
 					prow[j] = pj
-					psum += pj
+					if pj > 1e-7 {
+						hHere -= pj * math.Log(pj)
+					}
+				}
+				// adjust beta based on result
+				if hHere > hTarget {
+					// entropy was too high (distribution too diffuse)
+					// so we need to increase the precision for more peaky distribution
+					betamin = beta // move up the bounds
+					if betamax == inf {
+						beta = beta * 2
+					} else {
+						beta = (beta + betamax) / 2
+					}
 				} else {
-					prow[j] = 0.0
+					// converse case. make distrubtion less peaky
+					betamax = beta
+					if betamin == negInf {
+						beta = beta / 2
+					} else {
+						beta = (beta + betamin) / 2
+					}
+				}
+				// stopping conditions: too many tries or got a good precision
+				if math.Abs(hHere-hTarget) < tol {
+					break
 				}
 			}
-			// normalize p and compute entropy
-			hHere := 0.0
+			// copy over the final prow to P at row i
 			for j := 0; j < length; j++ {
-				pj := prow[j] / psum
-				prow[j] = pj
-				if pj > 1e-7 {
-					hHere -= pj * math.Log(pj)
-				}
+				pTemp[i*length+j] = prow[j]
 			}
-			// adjust beta based on result
-			if hHere > hTarget {
-				// entropy was too high (distribution too diffuse)
-				// so we need to increase the precision for more peaky distribution
-				betamin = beta // move up the bounds
-				if betamax == inf {
-					beta = beta * 2
-				} else {
-					beta = (beta + betamax) / 2
-				}
-			} else {
-				// converse case. make distrubtion less peaky
-				betamax = beta
-				if betamin == negInf {
-					beta = beta / 2
-				} else {
-					beta = (beta + betamin) / 2
-				}
-			}
-			// stopping conditions: too many tries or got a good precision
-			if math.Abs(hHere-hTarget) < tol {
-				break
-			}
-		}
-		// copy over the final prow to P at row i
-		for j := 0; j < length; j++ {
-			pTemp[i*length+j] = prow[j]
-		}
+			c <- 1
+		}(i)
+
 	} // end loop over examples i
+	for n := 0; n < length; n++ {
+		<-c
+	}
 	// symmetrize P and normalize it to sum to 1 over all ij
+
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute probability........\r"))
+	cp := make(chan int, runtime.NumCPU())
 	probas := make([]float64, length*length)
 	length2 := float64(length * 2)
 	for i := 0; i < length; i++ {
-		for j := 0; j < length; j++ {
-			probas[i*length+j] = math.Max((pTemp[i*length+j]+pTemp[j*length+i])/length2, 1e-100)
-		}
+		go func(i int) {
+			for j := 0; j < length; j++ {
+				probas[i*length+j] = math.Max((pTemp[i*length+j]+pTemp[j*length+i])/length2, 1e-100)
+			}
+			cp <- 1
+		}(i)
+
 	}
+	for n := 0; n < length; n++ {
+		<-cp
+	}
+	fmt.Println("")
 	return probas
 }
 

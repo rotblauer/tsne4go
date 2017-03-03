@@ -6,7 +6,7 @@ type Distancer interface {
 	Distance(i, j int) float64 // Distance between items i and j of the collection
 }
 
-// A Distancer implemented for vectors of float64
+//VectorDistancer A Distancer implemented for vectors of float64
 type VectorDistancer [][]float64
 
 // Len returns the length of the vector.

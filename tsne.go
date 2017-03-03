@@ -1,11 +1,15 @@
-// This is tsne4go, an implementation of the tSNE algorithm in Go. It is licensed under the MIT license.
+// Package tsne4go , an implementation of the tSNE algorithm in Go. It is licensed under the MIT license.
 // This library is strongly inspired from tsnejs, an equivalent library for javascript.
 // Its goal is to reduce the dimension of data from a high-dimension space to a low-dimension (typically 2 ou 3) one.
 // To learn more about it, you can download the scientific paper describing the tSNE algorithm.
 package tsne4go
 
 import (
+	"fmt"
+	"log"
 	"math"
+	"os"
+	"runtime"
 )
 
 const (
@@ -60,6 +64,8 @@ func (tsne *TSne) Step() float64 {
 	cost, grad := tsne.costGrad(tsne.Solution) // evaluate gradient
 	// perform gradient step
 	var ymean Point
+
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute step %d.......... \r", tsne.iter))
 	for i := 0; i < length; i++ {
 		for d := 0; d < NbDims; d++ {
 			gid := grad[i][d]
@@ -94,6 +100,7 @@ func (tsne *TSne) Step() float64 {
 
 // return cost and gradient, given an arrangement
 func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute cost and gradient...\r"))
 	length := tsne.length
 	P := tsne.probas
 	pmul := 1.0
@@ -103,6 +110,8 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 	// compute current Q distribution, unnormalized first
 	Qu := make([]float64, length*length)
 	qsum := 0.0
+	//ci := make(chan float64, runtime.NumCPU())
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute Q distribution......\r"))
 	for i := 0; i < length-1; i++ {
 		for j := i + 1; j < length; j++ {
 			dsum := 0.0
@@ -116,6 +125,7 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 			qsum += 2 * qu
 		}
 	}
+
 	// normalize Q distribution to sum to 1
 	Q := make([]float64, length*length)
 	for q := range Q {
@@ -123,21 +133,30 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 	}
 	cost = 0.0
 	grad = make([]Point, length)
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Normalize Q distribution....\r"))
+	c := make(chan int, runtime.NumCPU())
 	for i := 0; i < length; i++ {
-		for j := 0; j < length; j++ {
-			idx := i*length + j
-			cost += -P[idx] * math.Log(Q[idx]) // accumulate cost (the non-constant portion at least...)
-			premult := 4 * (pmul*P[idx] - Q[idx]) * Qu[idx]
-			for d := 0; d < NbDims; d++ {
-				grad[i][d] += premult * (Y[i][d] - Y[j][d])
+		go func(i int) {
+			for j := 0; j < length; j++ {
+				idx := i*length + j
+				cost += -P[idx] * math.Log(Q[idx]) // accumulate cost (the non-constant portion at least...)
+				premult := 4 * (pmul*P[idx] - Q[idx]) * Qu[idx]
+				for d := 0; d < NbDims; d++ {
+					grad[i][d] += premult * (Y[i][d] - Y[j][d])
+				}
 			}
-		}
+			c <- 1
+		}(i)
+	}
+	for n := 0; n < length; n++ {
+		<-c
 	}
 	return cost, grad
 }
 
 // NormalizeSolution makes all values from the solution in the interval [0; 1].
 func (tsne *TSne) NormalizeSolution() {
+	log.Println("Normalize solutions.........")
 	var mins [NbDims]float64
 	var maxs [NbDims]float64
 	for i, pt := range tsne.Solution {

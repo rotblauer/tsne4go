@@ -1,4 +1,6 @@
 # tsne4go
+Change : Enable parallel processing
+
 This is **tsne4go**, an implementation of the tSNE algorithm in Go.
 It is licensed under the MIT license.
 
