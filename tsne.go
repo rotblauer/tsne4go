@@ -65,7 +65,7 @@ func (tsne *TSne) Step() float64 {
 	// perform gradient step
 	var ymean Point
 
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute step %d.......... \r", tsne.iter))
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("%d - Compute step.......... \r", tsne.iter))
 	for i := 0; i < length; i++ {
 		for d := 0; d < NbDims; d++ {
 			gid := grad[i][d]
@@ -100,7 +100,7 @@ func (tsne *TSne) Step() float64 {
 
 // return cost and gradient, given an arrangement
 func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute cost and gradient...\r"))
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("%d - Compute cost and gradient...\r", tsne.iter))
 	length := tsne.length
 	P := tsne.probas
 	pmul := 1.0
@@ -111,7 +111,7 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 	Qu := make([]float64, length*length)
 	qsum := 0.0
 	//ci := make(chan float64, runtime.NumCPU())
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute Q distribution......\r"))
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("%d - Compute Q distribution......\r", tsne.iter))
 	for i := 0; i < length-1; i++ {
 		for j := i + 1; j < length; j++ {
 			dsum := 0.0
@@ -133,7 +133,7 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 	}
 	cost = 0.0
 	grad = make([]Point, length)
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("Normalize Q distribution....\r"))
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("%d - Normalize Q distribution....\r", tsne.iter))
 	c := make(chan int, runtime.NumCPU())
 	for i := 0; i < length; i++ {
 		go func(i int) {
