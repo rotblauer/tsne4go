@@ -110,20 +110,35 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 	// compute current Q distribution, unnormalized first
 	Qu := make([]float64, length*length)
 	qsum := 0.0
-	//ci := make(chan float64, runtime.NumCPU())
+	ci := make(chan int, runtime.NumCPU()*4)
+	qarr := make([]float64, (length*(length-1))/2)
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("%d - Compute Q distribution......\r", tsne.iter))
 	for i := 0; i < length-1; i++ {
-		for j := i + 1; j < length; j++ {
-			dsum := 0.0
-			for d := 0; d < NbDims; d++ {
-				dhere := Y[i][d] - Y[j][d]
-				dsum += dhere * dhere
+		go func(i int) {
+			for j := i + 1; j < length; j++ {
+				dsum := 0.0
+				for d := 0; d < NbDims; d++ {
+					dhere := Y[i][d] - Y[j][d]
+					dsum += dhere * dhere
+				}
+				qu := 1.0 / (1.0 + dsum) // Student t-distribution
+				Qu[i*length+j] = qu
+				Qu[j*length+i] = qu
+				//qsum += 2 * qu
+				x := (i * length) - ((i * (i + 1)) / 2) + (j - i - 1)
+				qarr[x] = 2 * qu
+				//counter++
 			}
-			qu := 1.0 / (1.0 + dsum) // Student t-distribution
-			Qu[i*length+j] = qu
-			Qu[j*length+i] = qu
-			qsum += 2 * qu
-		}
+			ci <- 1
+		}(i)
+	}
+
+	for n := 0; n < (length - 1); n++ {
+		<-ci
+	}
+
+	for i := 0; i < (length*(length-1))/2; i++ {
+		qsum += qarr[i]
 	}
 
 	// normalize Q distribution to sum to 1
@@ -134,7 +149,7 @@ func (tsne *TSne) costGrad(Y []Point) (cost float64, grad []Point) {
 	cost = 0.0
 	grad = make([]Point, length)
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("%d - Normalize Q distribution....\r", tsne.iter))
-	c := make(chan int, runtime.NumCPU())
+	c := make(chan int, runtime.NumCPU()*4)
 	for i := 0; i < length; i++ {
 		go func(i int) {
 			for j := 0; j < length; j++ {

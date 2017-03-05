@@ -55,7 +55,7 @@ func fill2d(n int, val float64) []Point {
 // compute pairwise distance in all vectors in X
 func xtod(x Distancer) []float64 {
 	log.Println("Compute pairwise distance in all vectors in X")
-	c := make(chan int, runtime.NumCPU())
+	c := make(chan int, runtime.NumCPU()*4)
 	length := x.Len()
 	dists := make([]float64, length*length) // allocate contiguous array
 	for i := 0; i < length-1; i++ {
@@ -85,7 +85,7 @@ var (
 // compute (p_{i|j} + p_{j|i})/(2n)
 func d2p(D []float64, perplexity, tol float64) []float64 {
 	log.Println("Compute d2p.................")
-	c := make(chan int, runtime.NumCPU())
+	c := make(chan int, runtime.NumCPU()*4)
 	length := int(math.Sqrt(float64(len(D))))
 	pTemp := make([]float64, length*length) // temporary probability matrix
 	//prow := make([]float64, length)         // a temporary storage compartment
@@ -159,7 +159,7 @@ func d2p(D []float64, perplexity, tol float64) []float64 {
 	// symmetrize P and normalize it to sum to 1 over all ij
 
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("Compute probability........\r"))
-	cp := make(chan int, runtime.NumCPU())
+	cp := make(chan int, runtime.NumCPU()*4)
 	probas := make([]float64, length*length)
 	length2 := float64(length * 2)
 	for i := 0; i < length; i++ {
