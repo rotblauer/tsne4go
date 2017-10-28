@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	perplexity float64 = 30
-	epsilon    float64 = 10
+	PerplexityDefault float64 = 30
+	EpsilonDefault    float64 = 10
+	ToleranceDefault  float64 = 1e-4
 	// NbDims is the number of dimensions in the target space, typically 2 or 3.
 	NbDims int = 2
 )
@@ -42,23 +43,23 @@ type TSne struct {
 // Meta-information is provided here.
 // It is under the programmer's responsibility :
 // it can be nil if no meta information is needed, or anything else.
-func New(x Distancer, meta []interface{}) *TSne {
+func New(x Distancer, meta []interface{}, perplexity float64, tol float64) *TSne {
 	dists := xtod(x) // convert x to distances using gaussian kernel
 	length := x.Len()
 	tsne := &TSne{
-		0,                     // iters
-		length,                //length
-		d2p(dists, 30, 1e-4),  // probas
-		randn2d(length),       // Solution
-		fill2d(length, 1.0),   // gains
-		make([]Point, length), // ystep
+		0,      // iters
+		length, //length
+		d2p(dists, perplexity, tol), // probas
+		randn2d(length),             // Solution
+		fill2d(length, 1.0),         // gains
+		make([]Point, length),       // ystep
 		meta,
 	}
 	return tsne
 }
 
 // Step performs a single step of optimization to improve the embedding.
-func (tsne *TSne) Step() float64 {
+func (tsne *TSne) Step(epsilon float64) float64 {
 	tsne.iter++
 	length := tsne.length
 	cost, grad := tsne.costGrad(tsne.Solution) // evaluate gradient
