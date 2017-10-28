@@ -77,13 +77,13 @@ func xtod(x Distancer) []float64 {
 
 // "constants" for positive and negative infinity
 var (
-	inf     = math.Inf(1)
-	negInf  = math.Inf(-1)
-	hTarget = math.Log(perplexity) // target entropy of distribution
+	inf    = math.Inf(1)
+	negInf = math.Inf(-1)
 )
 
 // compute (p_{i|j} + p_{j|i})/(2n)
-func d2p(D []float64, perplexity, tol float64) []float64 {
+func d2p(D []float64, perplexity float64, tol float64) []float64 {
+	hTarget := math.Log(perplexity) // target entropy of distribution
 	log.Println("Compute d2p.................")
 	c := make(chan int, runtime.NumCPU()*4)
 	length := int(math.Sqrt(float64(len(D))))
